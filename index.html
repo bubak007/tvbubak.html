@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Streaming Bubak Channel</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: black; color: white; text-align: center; margin: 0; }
+        .container { max-width: 800px; margin: auto; padding: 20px; background: #222; border-radius: 10px; }
+        h2 { font-size: 24px; font-weight: bold; color: yellow; }
+        input, button { padding: 10px; margin: 5px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #333; color: white; }
+        th, td { border: 1px solid #555; padding: 10px; text-align: center; }
+        th { background: #444; }
+        .status { font-weight: bold; color: lime; }
+        video { width: 100%; max-height: 500px; margin-top: 10px; transition: transform 0.3s; display: none; }
+        .fullscreen { width: 100vw; height: 100vh; position: fixed; top: 0; left: 0; }
+        #komentarBox { margin-top: 20px; background: #333; padding: 10px; border-radius: 5px; max-height: 200px; overflow-y: auto; }
+        #komentarInput { width: 70%; padding: 10px; }
+        .btn { padding: 10px; cursor: pointer; background: yellow; border: none; margin: 5px; }
+        #jumlahPenonton { font-size: 18px; font-weight: bold; color: cyan; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Jadwal TV Live Streaming Bubak Channel</h2>
+    <p id="tanggalSekarang"></p>
+    <label>Jam Mulai (HH:MM:SS):</label>
+    <input type="time" id="jamMulai" step="1">
+    <input type="file" id="uploadVideo" accept="video/*">
+    <button onclick="tambahVideo()">Tambah Video</button>
+    <button onclick="resetVideo()">Reset</button>
+
+    <table id="jadwalTable">
+        <thead>
+            <tr>
+                <th>Jam Mulai</th>
+                <th>Jam Selesai</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody id="jadwalBody"></tbody>
+    </table>
+</div>
+
+<video id="player" controls autoplay></video>
+
+<p class="status">📡 Sedang Streaming</p>
+<p id="jumlahPenonton">👥 Penonton: 0</p>
+
+<div id="komentarBox">
+    <input type="text" id="komentarInput" placeholder="Tulis komentar...">
+    <button class="btn" onclick="kirimKomentar()">Kirim</button>
+    <button class="btn" onclick="kirimVoice()">🎤 Voice</button>
+    <button class="btn" onclick="kirimGif()">🎁 GIF</button>
+    <button class="btn" onclick="donasi()">💰 Donasi</button>
+    <button class="btn">❤️ Like</button>
+    <button class="btn">⭐ Follow</button>
+    <button class="btn">🔄 Share</button>
+</div>
+
+<script>
+    let videos = [];
+    let currentVideoIndex = -1;
+    let isPlaying = false;
+    let penonton = 0;
+
+    function updateTanggal() {
+        const today = new Date();
+        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        document.getElementById('tanggalSekarang').innerText = today.toLocaleDateString('id-ID', options);
+    }
+
+    function tambahVideo() {
+        const jamMulaiInput = document.getElementById('jamMulai').value;
+        const videoFile = document.getElementById('uploadVideo').files[0];
+
+        if (!videoFile) {
+            alert('Harap upload video!');
+            return;
+        }
+
+        let jamMulai;
+        if (videos.length === 0) {
+            if (!jamMulaiInput) {
+                alert('Harap isi jam mulai untuk video pertama!');
+                return;
+            }
+            jamMulai = convertToDate(jamMulaiInput);
+        } else {
+            let lastVideo = videos[videos.length - 1];
+            jamMulai = (jamMulaiInput && convertToDate(jamMulaiInput) > lastVideo.jamSelesai) ? convertToDate(jamMulaiInput) : lastVideo.jamSelesai;
+        }
+
+        const videoElement = document.createElement('video');
+        videoElement.preload = 'metadata';
+        videoElement.src = URL.createObjectURL(videoFile);
+        
+        videoElement.onloadedmetadata = function () {
+            const durasiVideo = videoElement.duration * 1000;
+            const jamSelesai = new Date(jamMulai.getTime() + durasiVideo);
+
+            const videoData = {
+                nama: videoFile.name,
+                jamMulai: jamMulai,
+                jamSelesai: jamSelesai,
+                status: "Menunggu",
+                file: videoFile
+            };
+
+            videos.push(videoData);
+            updateTabel();
+        };
+    }
+
+    function convertToDate(timeStr) {
+        const [jam, menit, detik] = timeStr.split(':').map(Number);
+        let waktu = new Date();
+        waktu.setHours(jam, menit, detik, 0);
+        return waktu;
+    }
+
+    function updateTabel() {
+        const tbody = document.getElementById('jadwalBody');
+        tbody.innerHTML = '';
+
+        const now = new Date();
+        videos = videos.filter(video => now < video.jamSelesai);
+
+        videos.forEach((video, index) => {
+            video.status = now >= video.jamMulai && now < video.jamSelesai ? "Sedang Tayang" : "Menunggu";
+            let row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${video.jamMulai.toLocaleTimeString()}</td>
+                <td>${video.jamSelesai.toLocaleTimeString()}</td>
+                <td class="status">${video.status}</td>
+            `;
+            tbody.appendChild(row);
+        });
+
+        cekDanPutarVideo();
+    }
+
+    function cekDanPutarVideo() {
+        const now = new Date();
+        const player = document.getElementById('player');
+
+        for (let i = 0; i < videos.length; i++) {
+            if (now >= videos[i].jamMulai && now < videos[i].jamSelesai) {
+                if (currentVideoIndex !== i) {
+                    currentVideoIndex = i;
+                    player.src = URL.createObjectURL(videos[i].file);
+                    player.style.display = 'block';
+                    player.play();
+                    player.onended = function () {
+                        currentVideoIndex = -1;
+                        cekDanPutarVideo();
+                    };
+                }
+                return;
+            }
+        }
+
+        player.style.display = 'none';
+    }
+
+    window.addEventListener("orientationchange", function() {
+        let player = document.getElementById("player");
+        player.classList.toggle("fullscreen", window.orientation === 90 || window.orientation === -90);
+    });
+
+    setInterval(updateTabel, 1000);
+    updateTanggal();
+</script>
+
+</body>
+</html>
